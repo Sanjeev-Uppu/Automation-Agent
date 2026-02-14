@@ -2,11 +2,14 @@ import { useState } from "react";
 import { askQuestion } from "../services/api";
 import StructuredResponse from "../components/chat/StructuredResponse";
 import { motion } from "framer-motion";
+import { useNavigate } from "react-router-dom";
 
 export default function ChatPage() {
   const [question, setQuestion] = useState("");
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(false);
+
+  const navigate = useNavigate();
 
   const handleAsk = async () => {
     if (!question.trim()) return;
@@ -20,6 +23,35 @@ export default function ChatPage() {
     setLoading(true);
 
     try {
+      const lower = question.toLowerCase();
+
+      // 🔥 MOCK FLOW
+      if (lower.includes("mock") || lower.includes("test")) {
+        const response = await fetch(
+          "http://127.0.0.1:8002/generate-mock/",
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              grade: 5,
+              subject: "science",
+              chapter_name: "Animals",
+            }),
+          }
+        );
+
+        if (!response.ok) {
+          throw new Error("Failed to generate mock test");
+        }
+
+        const mockData = await response.json();
+
+        navigate("/mock", { state: mockData });
+        setQuestion("");
+        return;
+      }
+
+      // 🔥 NORMAL QA FLOW
       const data = await askQuestion({
         question,
         grade: 5,
@@ -34,8 +66,20 @@ export default function ChatPage() {
 
       setMessages((prev) => [...prev, botMessage]);
       setQuestion("");
+
     } catch (error) {
-      console.error(error);
+      console.error("Error:", error);
+
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: "bot",
+          structured: {
+            answer_type: "explanation",
+            explanation: "Something went wrong. Please try again.",
+          },
+        },
+      ]);
     } finally {
       setLoading(false);
     }
@@ -50,7 +94,7 @@ export default function ChatPage() {
           AI Lesson Assistant
         </h2>
         <p className="text-sm text-gray-400 mt-1">
-          Ask questions and get structured intelligent responses.
+          Ask questions or generate a mock test.
         </p>
       </div>
 
@@ -88,14 +132,17 @@ export default function ChatPage() {
         )}
       </div>
 
-      {/* Input */}
+      {/* Input Section */}
       <div className="p-4 border-t border-white/10 flex gap-4 bg-black/40">
         <input
           type="text"
           value={question}
           onChange={(e) => setQuestion(e.target.value)}
-          placeholder="Ask your question..."
+          placeholder="Ask a question or type 'Generate mock test'..."
           className="flex-1 bg-black/60 border border-white/10 px-5 py-3 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-cyan-400"
+          onKeyDown={(e) => {
+            if (e.key === "Enter") handleAsk();
+          }}
         />
 
         <button

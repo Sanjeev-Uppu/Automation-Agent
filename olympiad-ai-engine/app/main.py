@@ -1,37 +1,57 @@
 from dotenv import load_dotenv
 load_dotenv()
 
+import json
+import re
+from typing import List, Optional
+from app.services.planner_engine import generate_llm_plan
+from app.services.deterministic_planner import generate_fallback_plan
+
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+
 from app.models.request_models import AskRequest
+from app.models.mock_models import MockRequest, SubmissionRequest
+
 from app.embeddings.embedder import generate_embedding
 from app.vectorstore.qdrant_client import search_similar
+
 from app.services.qa_engine import generate_answer
 from app.services.ingest import ingest_pdf
-from pydantic import BaseModel
-from typing import List, Optional
-from fastapi.middleware.cors import CORSMiddleware
-import re
+
+# 🔥 LLM mock engine
+from app.services.mock_engine import generate_mock_exam as generate_llm_mock
+
+# 🔥 Deterministic fallback engine
+from app.services.deterministic_mock_engine import generate_mock_exam as generate_fallback_mock
+
+from google.genai.errors import ClientError
 
 
-#app = FastAPI(title="Olympiad Mastery AI Engine")
+# --------------------------------------------------
+# 🚀 FASTAPI APP
+# --------------------------------------------------
 
 app = FastAPI(title="Olympiad Mastery AI Engine")
 
- 
+
+# --------------------------------------------------
+# 🌍 CORS CONFIG
+# --------------------------------------------------
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],   # allow all origins
-    allow_credentials=False,  # MUST be False when using "*"
+    allow_origins=["*"],
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 
-
-# -------------------------------
-# 🔹 RESPONSE MODEL (PRO LEVEL)
-# -------------------------------
+# --------------------------------------------------
+# 📦 RESPONSE MODEL
+# --------------------------------------------------
 
 class AskResponse(BaseModel):
     question: str
@@ -41,18 +61,18 @@ class AskResponse(BaseModel):
     explanation: Optional[str] = None
 
 
-# -------------------------------
-# 🔹 ROOT
-# -------------------------------
+# --------------------------------------------------
+# 🏠 ROOT
+# --------------------------------------------------
 
 @app.get("/")
 def root():
     return {"message": "Olympiad AI Engine Running Successfully"}
 
 
-# -------------------------------
-# 🔹 INGEST
-# -------------------------------
+# --------------------------------------------------
+# 📥 INGEST PDF
+# --------------------------------------------------
 
 @app.post("/ingest/")
 def ingest():
@@ -64,9 +84,9 @@ def ingest():
     )
 
 
-# -------------------------------
-# 🔹 HELPER: Extract List Cleanly
-# -------------------------------
+# --------------------------------------------------
+# 🧠 HELPER: Extract List From Context
+# --------------------------------------------------
 
 def extract_list_from_context(text: str):
     pattern = r'Example:\s*(.*)'
@@ -83,24 +103,22 @@ def extract_list_from_context(text: str):
     return items
 
 
-# -------------------------------
-# 🔹 ASK ENDPOINT
-# -------------------------------
+# --------------------------------------------------
+# 💬 ASK ENDPOINT
+# --------------------------------------------------
 
 @app.post("/ask/", response_model=AskResponse)
 def ask_question(request: AskRequest):
 
     collection_name = f"olympiad_{request.grade}_{request.subject}"
 
-    # Step 1: Convert question → embedding
+    # Convert question to embedding
     query_vector = generate_embedding(request.question)
 
-    # Step 2: Adjust retrieval depth
     is_list_query = "list" in request.question.lower()
 
     limit = 1 if is_list_query else 3
 
-    # Step 3: Search vector DB
     results = search_similar(
         collection_name,
         query_vector,
@@ -111,10 +129,9 @@ def ask_question(request: AskRequest):
     if not results:
         raise HTTPException(status_code=404, detail="Not available in the lesson.")
 
-    # Step 4: Combine context
     context_text = "\n\n".join([r["content"] for r in results])
 
-    # Step 5: If listing question → structured output
+    # 🔹 LIST MODE
     if is_list_query:
         structured_list = extract_list_from_context(context_text)
 
@@ -125,7 +142,7 @@ def ask_question(request: AskRequest):
             data=structured_list
         )
 
-    # Step 6: Explanation mode (LLM)
+    # 🔹 EXPLANATION MODE (LLM)
     answer = generate_answer(context_text, request.question)
 
     return AskResponse(
@@ -133,3 +150,92 @@ def ask_question(request: AskRequest):
         answer_type="explanation",
         explanation=answer
     )
+
+
+# --------------------------------------------------
+# 📝 GENERATE MOCK EXAM
+# --------------------------------------------------
+
+@app.post("/generate-mock/")
+def generate_mock(request: MockRequest):
+
+    collection_name = f"olympiad_{request.grade}_{request.subject}"
+
+    results = search_similar(
+        collection_name,
+        generate_embedding(request.chapter_name),
+        request.chapter_name,
+        limit=5
+    )
+
+    if not results:
+        return {"error": "Chapter content not found."}
+
+    context_text = "\n\n".join([r["content"] for r in results])
+
+    # --------------------------------------------------
+    # 🔥 TRY LLM FIRST
+    # --------------------------------------------------
+
+    try:
+        mock_json_string = generate_llm_mock(context_text, request.chapter_name)
+
+        mock_data = json.loads(mock_json_string)
+
+        print("✅ LLM Mock Used")
+        return mock_data
+
+    except ClientError:
+        print("⚠️ Gemini quota exceeded. Switching to fallback.")
+
+    except Exception as e:
+        print("⚠️ LLM failed. Using fallback engine.")
+        print("Error:", str(e))
+
+    # --------------------------------------------------
+    # 🔥 FALLBACK ENGINE
+    # --------------------------------------------------
+
+    fallback_mock = generate_fallback_mock(context_text, request.chapter_name)
+
+    print("✅ Deterministic Mock Used")
+    return fallback_mock
+
+
+# --------------------------------------------------
+# 🧾 SUBMIT MOCK
+# --------------------------------------------------
+
+@app.post("/submit-mock/")
+def submit_mock(submission: SubmissionRequest):
+
+    score = 0
+
+    for q in submission.questions:
+        if q.selected_answer == q.correct_answer:
+            score += 1
+
+    total = len(submission.questions)
+
+    return {
+        "total_questions": total,
+        "correct": score,
+        "percentage": round((score / total) * 100, 2)
+    }
+
+
+# --------------------------------------------------
+# 🗓️ GENERATE STUDY PLAN
+# --------------------------------------------------
+@app.post("/generate-plan/")
+def generate_plan(duration_days: int, chapter_name: str):
+
+    try:
+        # 🔥 Try LLM first
+        plan_json = generate_llm_plan(duration_days, chapter_name)
+        return json.loads(plan_json)
+
+    except Exception:
+        # 🔥 Fallback
+        return generate_fallback_plan(duration_days, chapter_name)
+
