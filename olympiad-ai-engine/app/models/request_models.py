@@ -6,3 +6,7 @@ class AskRequest(BaseModel):
     grade: int
     subject: str
     chapter_name: Optional[str] = None
+
+
+
+ 

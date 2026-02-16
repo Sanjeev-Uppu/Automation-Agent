@@ -10,31 +10,32 @@ export default function Navbar() {
                     sticky top-0 z-50">
 
       {/* Logo Section */}
-      <motion.div
-        whileHover={{ scale: 1.05 }}
-        whileTap={{ scale: 0.95 }}
-        className="flex items-center gap-3 cursor-pointer group"
-      >
-        <motion.img
-          src={logo}
-          alt="Olympiad Mastery Logo"
-          className="w-10 h-10 object-contain transition-all duration-300
-                     group-hover:drop-shadow-[0_0_15px_rgba(34,211,238,0.7)]"
-          whileHover={{ rotate: 5 }}
-        />
+      <Link to="/">
+        <motion.div
+          whileHover={{ scale: 1.05 }}
+          whileTap={{ scale: 0.95 }}
+          className="flex items-center gap-3 cursor-pointer group"
+        >
+          <motion.img
+            src={logo}
+            alt="Olympiad Mastery Logo"
+            className="w-10 h-10 object-contain transition-all duration-300
+                       group-hover:drop-shadow-[0_0_15px_rgba(34,211,238,0.7)]"
+            whileHover={{ rotate: 5 }}
+          />
 
-        <h1 className="text-xl font-bold 
-                       bg-gradient-to-r from-cyan-400 via-blue-400 to-purple-400 
-                       bg-clip-text text-transparent">
-          Olympiad Mastery AI
-        </h1>
-      </motion.div>
+          <h1 className="text-xl font-bold 
+                         bg-gradient-to-r from-cyan-400 via-blue-400 to-purple-400 
+                         bg-clip-text text-transparent">
+            Olympiad Mastery AI
+          </h1>
+        </motion.div>
+      </Link>
 
       {/* Navigation Links */}
       <div className="flex gap-8 text-gray-300 text-sm font-medium">
-        <NavItem to="/" label="Chat" />
-        
-        <NavItem to="/dashboard" label="Dashboard" />
+        <NavItem to="/" label="Home" />
+        <NavItem to="/chat" label="Chat" />
         <NavItem to="/planner" label="Planner" />
         <NavItem to="/mock" label="Mock" />
       </div>

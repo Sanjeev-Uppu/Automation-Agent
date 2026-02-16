@@ -1,22 +1,65 @@
+import os
+from dotenv import load_dotenv
 from qdrant_client import QdrantClient
-from qdrant_client.models import VectorParams, Distance, Filter, FieldCondition, MatchValue
+from qdrant_client.models import (
+    VectorParams,
+    Distance,
+    Filter,
+    FieldCondition,
+    MatchValue
+)
 
-# Persistent storage
-client = QdrantClient(path="qdrant_data")
+load_dotenv()
 
-def create_collection(name: str, vector_size: int = 384):
-    client.recreate_collection(
-        collection_name=name,
-        vectors_config=VectorParams(size=vector_size, distance=Distance.COSINE),
-    )
+client = QdrantClient(
+    url=os.getenv("QDRANT_URL"),
+    api_key=os.getenv("QDRANT_API_KEY")
+)
+
+def create_collection(collection_name: str, vector_size: int = 384):
+
+    existing = [c.name for c in client.get_collections().collections]
+
+    if collection_name not in existing:
+        client.create_collection(
+            collection_name=collection_name,
+            vectors_config=VectorParams(
+                size=vector_size,
+                distance=Distance.COSINE
+            )
+        )
+
+    # Ensure payload indexes exist
+    try:
+        client.create_payload_index(
+            collection_name=collection_name,
+            field_name="chapter_name",
+            field_schema="keyword"
+        )
+    except:
+        pass
+
+    try:
+        client.create_payload_index(
+            collection_name=collection_name,
+            field_name="type",
+            field_schema="keyword"
+        )
+    except:
+        pass
 
 
-def search_similar(collection_name: str, query_vector: list, chapter_name: str = None, limit: int = 3):
+def search_similar(
+    collection_name: str,
+    query_vector: list,
+    chapter_name: str = None,
+    limit: int = 3
+):
 
-    search_filter = None
+    query_filter = None
 
     if chapter_name:
-        search_filter = Filter(
+        query_filter = Filter(
             must=[
                 FieldCondition(
                     key="chapter_name",
@@ -28,7 +71,7 @@ def search_similar(collection_name: str, query_vector: list, chapter_name: str =
     results = client.query_points(
         collection_name=collection_name,
         query=query_vector,
-        query_filter=search_filter,
+        query_filter=query_filter,
         limit=limit
     )
 

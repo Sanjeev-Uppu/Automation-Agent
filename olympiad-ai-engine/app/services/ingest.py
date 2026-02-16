@@ -5,9 +5,11 @@ from app.vectorstore.qdrant_client import client, create_collection
 from qdrant_client.models import PointStruct
 import uuid
 
+
 def ingest_pdf(file_path: str, grade: int, subject: str, chapter_name: str):
 
     collection_name = f"olympiad_{grade}_{subject}"
+
     create_collection(collection_name)
 
     text = load_pdf(file_path)
@@ -15,7 +17,7 @@ def ingest_pdf(file_path: str, grade: int, subject: str, chapter_name: str):
 
     points = []
 
-    # Store concept chunks
+    # Concept chunks
     for concept in concepts:
         points.append(
             PointStruct(
@@ -31,7 +33,7 @@ def ingest_pdf(file_path: str, grade: int, subject: str, chapter_name: str):
             )
         )
 
-    # Store FULL chapter
+    # Full chapter
     points.append(
         PointStruct(
             id=str(uuid.uuid4()),
@@ -42,10 +44,16 @@ def ingest_pdf(file_path: str, grade: int, subject: str, chapter_name: str):
                 "subject": subject,
                 "content": text,
                 "type": "full_chapter"
-                }
-            )
+            }
         )
+    )
 
-    client.upsert(collection_name=collection_name, points=points)
+    client.upsert(
+        collection_name=collection_name,
+        points=points
+    )
 
-    return {"status": "Ingestion Complete", "chunks": len(points)}
+    return {
+        "status": "Ingestion Complete",
+        "chunks": len(points)
+    }

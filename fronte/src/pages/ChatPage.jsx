@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 
 export default function ChatPage() {
   const [question, setQuestion] = useState("");
@@ -8,6 +8,9 @@ export default function ChatPage() {
   const [loading, setLoading] = useState(false);
 
   const navigate = useNavigate();
+  const location = useLocation();
+
+  const { grade, subject, chapter_name } = location.state || {};
 
   const handleAsk = async () => {
     if (!question.trim()) return;
@@ -24,7 +27,7 @@ export default function ChatPage() {
 
     try {
       // --------------------------------------------------
-      // 🔥 MOCK TEST (OPEN MOCK PAGE)
+      // 🔥 MOCK TEST
       // --------------------------------------------------
       if (
         (lower.includes("mock") || lower.includes("test")) &&
@@ -36,9 +39,9 @@ export default function ChatPage() {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-              grade: 5,
-              subject: "science",
-              chapter_name: "Animals",
+              grade,
+              subject,
+              chapter_name,
             }),
           }
         );
@@ -52,7 +55,7 @@ export default function ChatPage() {
       }
 
       // --------------------------------------------------
-      // 🔥 ALL OTHER REQUESTS (INCLUDING PDF)
+      // 🔥 ALL OTHER REQUESTS → USE /ask/
       // --------------------------------------------------
       const response = await fetch(
         "http://127.0.0.1:8002/ask/",
@@ -61,9 +64,9 @@ export default function ChatPage() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             question,
-            grade: 5,
-            subject: "science",
-            chapter_name: "Animals",
+            grade,
+            subject,
+            chapter_name,
           }),
         }
       );
@@ -72,8 +75,8 @@ export default function ChatPage() {
 
       const botMessage = {
         role: "bot",
-        type: data.type,
-        message: data.message,
+        type: data.type || "text",
+        message: data.answer || data.message || "No response",
         download_url: data.download_url || null,
       };
 
@@ -102,8 +105,11 @@ export default function ChatPage() {
         <h2 className="text-2xl font-bold text-cyan-400">
           AI Lesson Assistant
         </h2>
+
         <p className="text-sm text-gray-400 mt-1">
-          Ask normally, generate mock test, or request PDF format.
+          {chapter_name
+            ? `Chatting with Grade ${grade} ${subject} – ${chapter_name}`
+            : `Chatting with Grade ${grade} ${subject} (All Chapters)`}
         </p>
       </div>
 

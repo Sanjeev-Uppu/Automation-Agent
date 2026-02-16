@@ -1,9 +1,11 @@
 from dotenv import load_dotenv
 load_dotenv()
+from fastapi.middleware.cors import CORSMiddleware
 
 import os
 import uuid
 from typing import List, Optional
+from app.vectorstore.qdrant_client import client
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -16,6 +18,8 @@ from app.models.mock_models import MockRequest, SubmissionRequest
 from app.embeddings.embedder import generate_embedding
 from app.vectorstore.qdrant_client import search_similar
 
+
+
 from app.services.qa_engine import generate_answer
 from app.services.mock_engine import generate_mock_exam_llm
 from app.services.deterministic_mock_engine import generate_mock_exam as generate_fallback_mock
@@ -24,7 +28,7 @@ from app.services.deterministic_planner import generate_fallback_plan
 from app.services.pdf_exam_generator import generate_exam_pdf
 from app.services.pdf_planner_generator import generate_planner_pdf
 from app.services.ingest import ingest_pdf
-
+from app.services.bulk_ingest import ingest_all_pdfs
 from google.genai.errors import ClientError
 
 
@@ -37,7 +41,6 @@ app = FastAPI(title="Olympiad Mastery AI Engine")
 # --------------------------------------------------
 # 🌍 CORS CONFIG
 # --------------------------------------------------
-
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -281,3 +284,111 @@ async def global_exception_handler(request: Request, exc: Exception):
         status_code=200,
         content={"type": "text", "message": "AI temporarily unavailable."}
     )
+
+#ingest all pdfs
+@app.post("/admin/ingest-all")
+def ingest_all():
+    return ingest_all_pdfs()
+
+#getting grades
+from qdrant_client import QdrantClient
+
+ 
+
+@app.get("/grades")
+def get_grades():
+
+    collections = client.get_collections().collections
+    grades = set()
+
+    for col in collections:
+        scroll = client.scroll(collection_name=col.name, limit=10)
+
+        for point in scroll[0]:
+            if "grade" in point.payload:
+                grades.add(str(point.payload["grade"]))
+
+    return sorted(list(grades))
+
+
+#get subjects for a grade
+@app.get("/subjects")
+def get_subjects(grade: int):
+
+    collections = client.get_collections().collections
+    subjects = []
+
+    for col in collections:
+        parts = col.name.split("_")
+        if len(parts) == 3 and int(parts[1]) == grade:
+            subjects.append(parts[2])
+
+    return subjects
+
+#get chapters for a grade and subject
+from qdrant_client.models import Filter, FieldCondition, MatchValue
+
+
+@app.get("/chapters")
+def get_chapters(grade: int, subject: str):
+
+    collection_name = f"olympiad_{grade}_{subject}"
+
+    results = client.scroll(
+        collection_name=collection_name,
+        limit=100
+    )
+
+    chapters = set()
+
+    for point in results[0]:
+        chapters.add(point.payload["chapter_name"])
+
+    return list(chapters)
+
+#get full content for a chapter
+@app.get("/chapter-content")
+def get_chapter_content(grade: int, subject: str, chapter_name: str):
+
+    collection_name = f"olympiad_{grade}_{subject}"
+
+    results = client.scroll(
+        collection_name=collection_name,
+        scroll_filter=Filter(
+            must=[
+                FieldCondition(
+                    key="chapter_name",
+                    match=MatchValue(value=chapter_name)
+                ),
+                FieldCondition(
+                    key="type",
+                    match=MatchValue(value="full_chapter")
+                )
+            ]
+        ),
+        limit=1
+    )
+
+    if not results[0]:
+        return {"content": "Not found"}
+
+    return {"content": results[0][0].payload["content"]}
+
+
+#router register
+from app.routers import chat_router
+
+app.include_router(chat_router.router)
+
+
+
+
+
+
+
+
+
+@app.get("/debug-collections")
+def debug_collections():
+    collections = client.get_collections().collections
+    return [c.name for c in collections]
