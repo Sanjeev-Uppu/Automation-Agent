@@ -2,26 +2,29 @@ import os
 import json
 from google import genai
 
-
-def generate_llm_plan(duration_days, chapter_name):
+def generate_llm_plan(duration_days: int, chapter_name: str):
 
     api_key = os.getenv("GEMINI_API_KEY")
     if not api_key:
-        raise Exception("No API key found")
+        raise Exception("GEMINI_API_KEY not found")
 
     client = genai.Client(api_key=api_key)
 
     prompt = f"""
-Create a structured study plan for {duration_days} days
+You are an academic curriculum planner.
+
+Create a structured and professional {duration_days}-day study plan
 for the chapter "{chapter_name}".
 
 Requirements:
-- Divide topics evenly
-- Include revision days
-- Include mock practice days
+- Distribute topics evenly
+- Include 1 revision day
+- Include 1 mock practice day
+- Make tasks clear and actionable
+- Keep it structured and balanced
 - Return ONLY valid JSON
 
-Format:
+JSON Format:
 
 {{
   "duration_days": {duration_days},
@@ -29,8 +32,10 @@ Format:
   "plan": [
     {{
       "day": 1,
-      "topics": "Topics to study",
-      "tasks": "Reading / Practice / Revision"
+      "focus": "Main topic",
+      "topics": ["Topic 1", "Topic 2"],
+      "tasks": ["Read", "Practice MCQs", "Revise Notes"],
+      "estimated_hours": 2
     }}
   ]
 }}
@@ -38,12 +43,11 @@ Format:
 
     response = client.models.generate_content(
         model="gemini-2.5-flash",
-        contents=prompt
+        contents=prompt,
+        config={"response_mime_type": "application/json"}
     )
 
-    text = response.text.strip()
+    if not response.text:
+        raise Exception("Empty LLM response")
 
-    if text.startswith("```"):
-        text = text.split("```")[1]
-
-    return text
+    return json.loads(response.text)

@@ -12,13 +12,12 @@ export default function MockPage() {
   const [started, setStarted] = useState(false);
   const [result, setResult] = useState(null);
 
-  // TIMER LOGIC
+  // TIMER
   useEffect(() => {
     if (started && timeLeft > 0) {
       const timer = setInterval(() => {
         setTimeLeft((prev) => prev - 1);
       }, 1000);
-
       return () => clearInterval(timer);
     }
 
@@ -47,15 +46,36 @@ export default function MockPage() {
       "http://127.0.0.1:8002/submit-mock/",
       {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(submission),
       }
     );
 
     const data = await response.json();
     setResult(data);
+  };
+
+  const downloadQuestionPaper = async () => {
+    const response = await fetch(
+      "http://127.0.0.1:8002/download-exam-pdf/",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          grade: 5,
+          subject: "science",
+          chapter_name: mockData.chapter,
+        }),
+      }
+    );
+
+    const blob = await response.blob();
+    const url = window.URL.createObjectURL(blob);
+
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "Question_Paper.pdf";
+    a.click();
   };
 
   if (!mockData) {
@@ -66,36 +86,58 @@ export default function MockPage() {
     );
   }
 
-  return (
-    <div className="space-y-6 bg-white/5 backdrop-blur-xl p-8 rounded-3xl border border-white/10">
+  const totalMarks = mockData.questions.length * 2;
 
-      <h2 className="text-2xl font-bold text-cyan-400">
-        {mockData.chapter} Mock Test
-      </h2>
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-black via-indigo-950 to-purple-950 text-white p-10">
+
+      {/* EXAM HEADER */}
+      <div className="bg-white/5 backdrop-blur-xl p-6 rounded-3xl border border-white/10 mb-8">
+        <h1 className="text-3xl font-bold text-cyan-400">
+          Olympiad Mock Examination
+        </h1>
+
+        <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-4 text-sm text-gray-300">
+          <div><b>Chapter:</b> {mockData.chapter}</div>
+          <div><b>Questions:</b> {mockData.questions.length}</div>
+          <div><b>Total Marks:</b> {totalMarks}</div>
+          <div><b>Duration:</b> {mockData.duration_minutes} mins</div>
+        </div>
+      </div>
 
       {!started && (
-        <button
-          onClick={() => setStarted(true)}
-          className="px-6 py-3 bg-gradient-to-r from-cyan-500 to-purple-600 rounded-xl"
-        >
-          Start Test
-        </button>
+        <div className="flex gap-4">
+          <button
+            onClick={() => setStarted(true)}
+            className="px-6 py-3 bg-gradient-to-r from-cyan-500 to-purple-600 rounded-xl font-semibold"
+          >
+            Start Exam
+          </button>
+
+          <button
+            onClick={downloadQuestionPaper}
+            className="px-6 py-3 bg-purple-700 rounded-xl"
+          >
+            Download Question Paper PDF
+          </button>
+        </div>
       )}
 
       {started && !result && (
         <>
-          <div className="text-lg text-yellow-400">
+          <div className="text-lg text-yellow-400 mb-6">
             Time Left: {Math.floor(timeLeft / 60)}:
             {String(timeLeft % 60).padStart(2, "0")}
           </div>
 
-          {mockData.questions.map((q) => (
+          {mockData.questions.map((q, index) => (
             <div
               key={q.id}
-              className="bg-black/60 p-6 rounded-xl border border-white/10 space-y-3"
+              className="bg-black/60 p-6 rounded-xl border border-white/10 space-y-3 mb-6"
             >
               <p className="font-semibold">
-                {q.id}. {q.question}
+                Q{index + 1}. {q.question}
+                <span className="text-sm text-gray-400 ml-2">(2 Marks)</span>
               </p>
 
               {q.options.map((option) => (
@@ -104,9 +146,7 @@ export default function MockPage() {
                     type="radio"
                     name={`q${q.id}`}
                     value={option}
-                    onChange={() =>
-                      handleSelect(q.id, option)
-                    }
+                    onChange={() => handleSelect(q.id, option)}
                     className="mr-2"
                   />
                   {option}
@@ -117,17 +157,17 @@ export default function MockPage() {
 
           <button
             onClick={handleSubmit}
-            className="px-6 py-3 bg-green-600 rounded-xl mt-4"
+            className="px-6 py-3 bg-green-600 rounded-xl"
           >
-            Submit Test
+            Submit Exam
           </button>
         </>
       )}
 
       {result && (
-        <div className="bg-black/70 p-6 rounded-xl border border-white/10 space-y-2">
-          <h3 className="text-xl font-bold text-green-400">
-            Test Completed
+        <div className="bg-black/70 p-6 rounded-xl border border-white/10 mt-8">
+          <h3 className="text-xl font-bold text-green-400 mb-4">
+            Examination Result
           </h3>
           <p>Total Questions: {result.total_questions}</p>
           <p>Correct Answers: {result.correct}</p>

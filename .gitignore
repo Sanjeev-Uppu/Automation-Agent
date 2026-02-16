@@ -33,3 +33,6 @@ qdrant_data/
 ############################
 .DS_Store
 Thumbs.db
+
+olympiad-ai-engine/generated_pdfs/
+olympiad-ai-engine/exam_paper.pdf

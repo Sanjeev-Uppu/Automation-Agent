@@ -1,5 +1,6 @@
 import os
 from google import genai
+from google.genai.errors import ClientError
 
 
 def generate_answer(context, question):
@@ -7,7 +8,11 @@ def generate_answer(context, question):
     api_key = os.getenv("GEMINI_API_KEY")
 
     if not api_key:
-        raise ValueError("GEMINI_API_KEY not found. Check your .env file.")
+        return "API key not configured."
+
+    # 🔥 LIMIT CONTEXT SIZE (Prevents token overflow crash)
+    MAX_CONTEXT_CHARS = 4000
+    context = context[:MAX_CONTEXT_CHARS]
 
     client = genai.Client(api_key=api_key)
 
@@ -23,9 +28,20 @@ Question:
 {question}
 """
 
-    response = client.models.generate_content(
-        model="gemini-2.5-flash",
-        contents=prompt
-    )
+    try:
+        response = client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=prompt
+        )
 
-    return response.text
+        if not response.text:
+            return "AI returned empty response."
+
+        return response.text.strip()
+
+    except ClientError:
+        return "AI quota exceeded. Please try again later."
+
+    except Exception as e:
+        print("LLM Error:", str(e))
+        return "AI service temporarily unavailable."

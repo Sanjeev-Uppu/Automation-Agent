@@ -1,6 +1,4 @@
 import { useState } from "react";
-import { askQuestion } from "../services/api";
-import StructuredResponse from "../components/chat/StructuredResponse";
 import { motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 
@@ -14,6 +12,8 @@ export default function ChatPage() {
   const handleAsk = async () => {
     if (!question.trim()) return;
 
+    const lower = question.toLowerCase();
+
     const userMessage = {
       role: "user",
       content: question,
@@ -23,10 +23,13 @@ export default function ChatPage() {
     setLoading(true);
 
     try {
-      const lower = question.toLowerCase();
-
-      // 🔥 MOCK FLOW
-      if (lower.includes("mock") || lower.includes("test")) {
+      // --------------------------------------------------
+      // 🔥 MOCK TEST (OPEN MOCK PAGE)
+      // --------------------------------------------------
+      if (
+        (lower.includes("mock") || lower.includes("test")) &&
+        !lower.includes("pdf")
+      ) {
         const response = await fetch(
           "http://127.0.0.1:8002/generate-mock/",
           {
@@ -40,44 +43,50 @@ export default function ChatPage() {
           }
         );
 
-        if (!response.ok) {
-          throw new Error("Failed to generate mock test");
-        }
-
         const mockData = await response.json();
 
         navigate("/mock", { state: mockData });
         setQuestion("");
+        setLoading(false);
         return;
       }
 
-      // 🔥 NORMAL QA FLOW
-      const data = await askQuestion({
-        question,
-        grade: 5,
-        subject: "science",
-        chapter_name: "Animals",
-      });
+      // --------------------------------------------------
+      // 🔥 ALL OTHER REQUESTS (INCLUDING PDF)
+      // --------------------------------------------------
+      const response = await fetch(
+        "http://127.0.0.1:8002/ask/",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            question,
+            grade: 5,
+            subject: "science",
+            chapter_name: "Animals",
+          }),
+        }
+      );
+
+      const data = await response.json();
 
       const botMessage = {
         role: "bot",
-        structured: data,
+        type: data.type,
+        message: data.message,
+        download_url: data.download_url || null,
       };
 
       setMessages((prev) => [...prev, botMessage]);
       setQuestion("");
 
     } catch (error) {
-      console.error("Error:", error);
-
       setMessages((prev) => [
         ...prev,
         {
           role: "bot",
-          structured: {
-            answer_type: "explanation",
-            explanation: "Something went wrong. Please try again.",
-          },
+          type: "text",
+          message: "Something went wrong.",
         },
       ]);
     } finally {
@@ -90,11 +99,11 @@ export default function ChatPage() {
 
       {/* Header */}
       <div className="px-6 py-4 border-b border-white/10 bg-gradient-to-r from-cyan-500/10 to-purple-500/10">
-        <h2 className="text-2xl font-bold bg-gradient-to-r from-cyan-400 to-purple-400 bg-clip-text text-transparent">
+        <h2 className="text-2xl font-bold text-cyan-400">
           AI Lesson Assistant
         </h2>
         <p className="text-sm text-gray-400 mt-1">
-          Ask questions or generate a mock test.
+          Ask normally, generate mock test, or request PDF format.
         </p>
       </div>
 
@@ -118,7 +127,18 @@ export default function ChatPage() {
             {msg.role === "bot" && (
               <div className="flex justify-start">
                 <div className="bg-black/70 border border-white/10 rounded-2xl p-6 shadow-xl max-w-3xl w-full">
-                  <StructuredResponse response={msg.structured} />
+
+                  <p className="text-gray-200">{msg.message}</p>
+
+                  {msg.type === "pdf" && msg.download_url && (
+                    <button
+                      onClick={() => window.open(msg.download_url, "_blank")}
+                      className="mt-4 px-5 py-2 bg-green-600 rounded-lg hover:bg-green-500 transition"
+                    >
+                      Download PDF
+                    </button>
+                  )}
+
                 </div>
               </div>
             )}
@@ -127,18 +147,18 @@ export default function ChatPage() {
 
         {loading && (
           <div className="text-cyan-400 animate-pulse">
-            🤖 AI is thinking...
+            🤖 AI is generating...
           </div>
         )}
       </div>
 
-      {/* Input Section */}
+      {/* Input */}
       <div className="p-4 border-t border-white/10 flex gap-4 bg-black/40">
         <input
           type="text"
           value={question}
           onChange={(e) => setQuestion(e.target.value)}
-          placeholder="Ask a question or type 'Generate mock test'..."
+          placeholder="Try: 'Generate mock test' or 'Generate question paper PDF'..."
           className="flex-1 bg-black/60 border border-white/10 px-5 py-3 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-cyan-400"
           onKeyDown={(e) => {
             if (e.key === "Enter") handleAsk();
@@ -147,7 +167,7 @@ export default function ChatPage() {
 
         <button
           onClick={handleAsk}
-          className="px-6 py-3 rounded-xl bg-gradient-to-r from-cyan-500 to-purple-600 hover:scale-105 active:scale-95 transition-all shadow-lg"
+          className="px-6 py-3 rounded-xl bg-gradient-to-r from-cyan-500 to-purple-600 hover:scale-105 transition-all shadow-lg"
         >
           Ask
         </button>

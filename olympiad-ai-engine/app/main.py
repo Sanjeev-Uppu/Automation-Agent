@@ -1,14 +1,13 @@
 from dotenv import load_dotenv
 load_dotenv()
 
-import json
-import re
+import os
+import uuid
 from typing import List, Optional
-from app.services.planner_engine import generate_llm_plan
-from app.services.deterministic_planner import generate_fallback_plan
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 
 from app.models.request_models import AskRequest
@@ -18,13 +17,13 @@ from app.embeddings.embedder import generate_embedding
 from app.vectorstore.qdrant_client import search_similar
 
 from app.services.qa_engine import generate_answer
-from app.services.ingest import ingest_pdf
-
-# 🔥 LLM mock engine
-from app.services.mock_engine import generate_mock_exam as generate_llm_mock
-
-# 🔥 Deterministic fallback engine
+from app.services.mock_engine import generate_mock_exam_llm
 from app.services.deterministic_mock_engine import generate_mock_exam as generate_fallback_mock
+from app.services.planner_engine import generate_llm_plan
+from app.services.deterministic_planner import generate_fallback_plan
+from app.services.pdf_exam_generator import generate_exam_pdf
+from app.services.pdf_planner_generator import generate_planner_pdf
+from app.services.ingest import ingest_pdf
 
 from google.genai.errors import ClientError
 
@@ -34,7 +33,6 @@ from google.genai.errors import ClientError
 # --------------------------------------------------
 
 app = FastAPI(title="Olympiad Mastery AI Engine")
-
 
 # --------------------------------------------------
 # 🌍 CORS CONFIG
@@ -48,9 +46,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-
 # --------------------------------------------------
-# 📦 RESPONSE MODEL
+# 📦 RESPONSE MODEL (Optional legacy support)
 # --------------------------------------------------
 
 class AskResponse(BaseModel):
@@ -85,71 +82,94 @@ def ingest():
 
 
 # --------------------------------------------------
-# 🧠 HELPER: Extract List From Context
+# 💬 ASK ENDPOINT (Dynamic Chat + PDF)
 # --------------------------------------------------
 
-def extract_list_from_context(text: str):
-    pattern = r'Example:\s*(.*)'
-    matches = re.findall(pattern, text)
-
-    items = []
-    for match in matches:
-        parts = match.split(",")
-        for item in parts:
-            cleaned = item.strip().capitalize()
-            if cleaned and cleaned not in items:
-                items.append(cleaned)
-
-    return items
-
-
-# --------------------------------------------------
-# 💬 ASK ENDPOINT
-# --------------------------------------------------
-
-@app.post("/ask/", response_model=AskResponse)
+@app.post("/ask/")
 def ask_question(request: AskRequest):
 
+    user_query = request.question.lower()
     collection_name = f"olympiad_{request.grade}_{request.subject}"
 
-    # Convert question to embedding
+    # --------------------------------------------------
+    # 📄 QUESTION PAPER PDF REQUEST
+    # --------------------------------------------------
+    if "pdf" in user_query and "question paper" in user_query:
+
+        results = search_similar(
+            collection_name,
+            generate_embedding(request.chapter_name),
+            request.chapter_name,
+            limit=5
+        )
+
+        if not results:
+            return {"type": "text", "message": "Chapter content not found."}
+
+        context_text = "\n\n".join([r["content"] for r in results])
+        context_text = context_text[:4000]  # 🔥 Prevent token overflow
+
+        mock_data = generate_mock_exam_llm(context_text, request.chapter_name)
+
+        os.makedirs("generated_pdfs", exist_ok=True)
+        filename = f"question_{uuid.uuid4().hex}.pdf"
+        file_path = os.path.join("generated_pdfs", filename)
+
+        generate_exam_pdf(mock_data, file_path)
+
+        return {
+            "type": "pdf",
+            "message": "Your question paper is ready.",
+            "download_url": f"http://127.0.0.1:8002/download/{filename}"
+        }
+
+    # --------------------------------------------------
+    # 🗓️ PLANNER PDF REQUEST
+    # --------------------------------------------------
+    if "planner" in user_query and "pdf" in user_query:
+
+        try:
+            plan_data = generate_llm_plan(7, request.chapter_name)
+        except Exception:
+            plan_data = generate_fallback_plan(7, request.chapter_name)
+
+        os.makedirs("generated_pdfs", exist_ok=True)
+        filename = f"planner_{uuid.uuid4().hex}.pdf"
+        file_path = os.path.join("generated_pdfs", filename)
+
+        generate_planner_pdf(plan_data, file_path)
+
+        return {
+            "type": "pdf",
+            "message": "Your study planner PDF is ready.",
+            "download_url": f"http://127.0.0.1:8002/download/{filename}"
+        }
+
+    # --------------------------------------------------
+    # 🔹 NORMAL QA FLOW
+    # --------------------------------------------------
+
     query_vector = generate_embedding(request.question)
-
-    is_list_query = "list" in request.question.lower()
-
-    limit = 1 if is_list_query else 3
 
     results = search_similar(
         collection_name,
         query_vector,
         request.chapter_name,
-        limit=limit
+        limit=3
     )
 
     if not results:
-        raise HTTPException(status_code=404, detail="Not available in the lesson.")
+        return {"type": "text", "message": "Not available in the lesson."}
 
     context_text = "\n\n".join([r["content"] for r in results])
+    context_text = context_text[:4000]  # 🔥 Prevent Gemini crash
 
-    # 🔹 LIST MODE
-    if is_list_query:
-        structured_list = extract_list_from_context(context_text)
-
-        return AskResponse(
-            question=request.question,
-            answer_type="list",
-            count=len(structured_list),
-            data=structured_list
-        )
-
-    # 🔹 EXPLANATION MODE (LLM)
     answer = generate_answer(context_text, request.question)
 
-    return AskResponse(
-        question=request.question,
-        answer_type="explanation",
-        explanation=answer
-    )
+    return {
+        "type": "text",
+        "message": answer
+    }
 
 
 # --------------------------------------------------
@@ -172,16 +192,10 @@ def generate_mock(request: MockRequest):
         return {"error": "Chapter content not found."}
 
     context_text = "\n\n".join([r["content"] for r in results])
-
-    # --------------------------------------------------
-    # 🔥 TRY LLM FIRST
-    # --------------------------------------------------
+    context_text = context_text[:4000]
 
     try:
-        mock_json_string = generate_llm_mock(context_text, request.chapter_name)
-
-        mock_data = json.loads(mock_json_string)
-
+        mock_data = generate_mock_exam_llm(context_text, request.chapter_name)
         print("✅ LLM Mock Used")
         return mock_data
 
@@ -192,12 +206,7 @@ def generate_mock(request: MockRequest):
         print("⚠️ LLM failed. Using fallback engine.")
         print("Error:", str(e))
 
-    # --------------------------------------------------
-    # 🔥 FALLBACK ENGINE
-    # --------------------------------------------------
-
     fallback_mock = generate_fallback_mock(context_text, request.chapter_name)
-
     print("✅ Deterministic Mock Used")
     return fallback_mock
 
@@ -227,15 +236,48 @@ def submit_mock(submission: SubmissionRequest):
 # --------------------------------------------------
 # 🗓️ GENERATE STUDY PLAN
 # --------------------------------------------------
+
 @app.post("/generate-plan/")
 def generate_plan(duration_days: int, chapter_name: str):
 
     try:
-        # 🔥 Try LLM first
-        plan_json = generate_llm_plan(duration_days, chapter_name)
-        return json.loads(plan_json)
+        plan_data = generate_llm_plan(duration_days, chapter_name)
+        print("✅ LLM Plan Used")
+        return plan_data
 
-    except Exception:
-        # 🔥 Fallback
+    except Exception as e:
+        print("⚠️ LLM failed. Using fallback.")
+        print("Error:", str(e))
         return generate_fallback_plan(duration_days, chapter_name)
 
+
+# --------------------------------------------------
+# 📥 FILE DOWNLOAD ENDPOINT
+# --------------------------------------------------
+
+@app.get("/download/{filename}")
+def download_file(filename: str):
+
+    file_path = os.path.join("generated_pdfs", filename)
+
+    if not os.path.exists(file_path):
+        return {"error": "File not found."}
+
+    return FileResponse(
+        path=file_path,
+        media_type="application/pdf",
+        filename=filename
+    )
+
+
+# --------------------------------------------------
+# 🛡 GLOBAL ERROR HANDLER (Prevents 500 Crash)
+# --------------------------------------------------
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    print("Global Error:", str(exc))
+    return JSONResponse(
+        status_code=200,
+        content={"type": "text", "message": "AI temporarily unavailable."}
+    )
