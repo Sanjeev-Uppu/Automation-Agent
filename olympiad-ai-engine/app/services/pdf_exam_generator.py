@@ -13,23 +13,27 @@ from reportlab.lib import pagesizes
 from reportlab.lib.units import inch
 
 
-def generate_exam_pdf(mock_data, file_path="exam_paper.pdf"):
+def generate_question_paper_pdf(
+    question_data,
+    file_path="question_paper.pdf"
+):
 
-    # ----------------------------
-    # SAFETY CHECKS
-    # ----------------------------
-    if "questions" not in mock_data or not mock_data["questions"]:
-        raise ValueError("Invalid mock data: Questions missing")
+    if "questions" not in question_data or not question_data["questions"]:
+        raise ValueError("Invalid question paper data")
 
-    chapter = mock_data.get("chapter", "Unknown Chapter")
-    duration = mock_data.get("duration_minutes", 60)
-    questions = mock_data["questions"]
+    school_name = question_data["school_name"]
+    grade = question_data["grade"]
+    subject = question_data["subject"]
+    chapter = question_data["chapter"]
+    difficulty = question_data.get("difficulty_level", "Not Specified")
+    duration = question_data["duration_minutes"]
+    marks_per_question = question_data["marks_per_question"]
+    questions = question_data["questions"]
 
-    total_marks = len(questions) * 2
+    total_questions = len(questions)
+    total_marks = total_questions * marks_per_question
 
-    # ----------------------------
-    # DOCUMENT SETUP
-    # ----------------------------
+    # ---------------- DOCUMENT SETUP ----------------
     doc = SimpleDocTemplate(
         file_path,
         pagesize=pagesizes.A4,
@@ -41,23 +45,21 @@ def generate_exam_pdf(mock_data, file_path="exam_paper.pdf"):
 
     elements = []
     styles = getSampleStyleSheet()
-
     title_style = styles["Heading1"]
     normal_style = styles["Normal"]
 
-    # ----------------------------
-    # PAGE 1 - QUESTION PAPER
-    # ----------------------------
+    # ---------------- HEADER ----------------
+    elements.append(Paragraph(f"<b>{school_name}</b>", title_style))
+    elements.append(Spacer(1, 0.3 * inch))
 
-    elements.append(Paragraph("<b>Olympiad Mastery AI</b>", title_style))
-    elements.append(Spacer(1, 0.2 * inch))
-
-    header_data = [
-        ["Chapter:", chapter, "Duration:", f"{duration} Minutes"],
-        ["Total Questions:", str(len(questions)), "Total Marks:", str(total_marks)]
+    header_table_data = [
+        ["Grade:", str(grade), "Subject:", subject],
+        ["Chapter:", chapter, "Difficulty:", difficulty],
+        ["Duration:", f"{duration} Minutes", "Total Marks:", str(total_marks)],
+        ["Total Questions:", str(total_questions), "Marks per Question:", str(marks_per_question)]
     ]
 
-    table = Table(header_data, colWidths=[110, 160, 110, 110])
+    table = Table(header_table_data, colWidths=[120, 140, 120, 120])
     table.setStyle(TableStyle([
         ('BOX', (0, 0), (-1, -1), 1, colors.black),
         ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
@@ -65,59 +67,47 @@ def generate_exam_pdf(mock_data, file_path="exam_paper.pdf"):
     ]))
 
     elements.append(table)
-    elements.append(Spacer(1, 0.3 * inch))
+    elements.append(Spacer(1, 0.4 * inch))
 
-    # Instructions
+    # ---------------- INSTRUCTIONS ----------------
     elements.append(Paragraph("<b>Instructions:</b>", styles["Heading3"]))
     elements.append(Paragraph("1. All questions are compulsory.", normal_style))
-    elements.append(Paragraph("2. Each question carries 2 marks.", normal_style))
-    elements.append(Paragraph("3. Choose the correct answer.", normal_style))
-    elements.append(Spacer(1, 0.3 * inch))
+    elements.append(Paragraph(f"2. Each question carries {marks_per_question} marks.", normal_style))
+    elements.append(Paragraph("3. Choose the correct option.", normal_style))
+    elements.append(Paragraph(f"4. Total Duration: {duration} Minutes.", normal_style))
+    elements.append(Spacer(1, 0.4 * inch))
 
     elements.append(Paragraph("<b>Section A - Multiple Choice Questions</b>", styles["Heading2"]))
-    elements.append(Spacer(1, 0.2 * inch))
+    elements.append(Spacer(1, 0.3 * inch))
 
-    # ----------------------------
-    # QUESTIONS
-    # ----------------------------
-    for q in questions:
+    # ---------------- QUESTIONS ----------------
+    for index, q in enumerate(questions, start=1):
 
-        q_id = q.get("id", "")
-        q_text = q.get("question", "")
-        options = q.get("options", [])
+        q_text = q["question"]
+        options = q["options"]
 
         elements.append(
-            Paragraph(f"<b>Q{q_id}.</b> {q_text} (2 Marks)", normal_style)
+            Paragraph(f"<b>Q{index}.</b> {q_text} ({marks_per_question} Marks)", normal_style)
         )
-        elements.append(Spacer(1, 0.1 * inch))
+        elements.append(Spacer(1, 0.15 * inch))
 
         for option in options:
             elements.append(Paragraph(f"• {option}", normal_style))
 
-        elements.append(Spacer(1, 0.3 * inch))
+        elements.append(Spacer(1, 0.35 * inch))
 
-    # ----------------------------
-    # PAGE BREAK
-    # ----------------------------
+    # ---------------- ANSWER KEY PAGE ----------------
     elements.append(PageBreak())
-
-    # ----------------------------
-    # PAGE 2 - ANSWER KEY
-    # ----------------------------
     elements.append(Paragraph("<b>Answer Key</b>", title_style))
     elements.append(Spacer(1, 0.3 * inch))
 
-    for q in questions:
-        q_id = q.get("id", "")
-        answer = q.get("correct_answer", "")
+    for index, q in enumerate(questions, start=1):
         elements.append(
-            Paragraph(f"Q{q_id}: {answer}", normal_style)
+            Paragraph(f"Q{index}: {q['correct_answer']}", normal_style)
         )
         elements.append(Spacer(1, 0.2 * inch))
 
-    # ----------------------------
-    # BUILD PDF
-    # ----------------------------
+    # ---------------- BUILD ----------------
     doc.build(elements)
 
     return file_path

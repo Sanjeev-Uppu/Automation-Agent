@@ -16,6 +16,10 @@ client = QdrantClient(
     api_key=os.getenv("QDRANT_API_KEY")
 )
 
+# --------------------------------------------------
+# CREATE COLLECTION
+# --------------------------------------------------
+
 def create_collection(collection_name: str, vector_size: int = 384):
 
     existing = [c.name for c in client.get_collections().collections]
@@ -29,44 +33,50 @@ def create_collection(collection_name: str, vector_size: int = 384):
             )
         )
 
-    # Ensure payload indexes exist
-    try:
+        client.create_payload_index(
+            collection_name=collection_name,
+            field_name="subject",
+            field_schema="keyword"
+        )
+
         client.create_payload_index(
             collection_name=collection_name,
             field_name="chapter_name",
             field_schema="keyword"
         )
-    except:
-        pass
 
-    try:
-        client.create_payload_index(
-            collection_name=collection_name,
-            field_name="type",
-            field_schema="keyword"
-        )
-    except:
-        pass
 
+# --------------------------------------------------
+# SEARCH SIMILAR (SAFE VERSION)
+# --------------------------------------------------
 
 def search_similar(
-    collection_name: str,
+    *,
+    grade: int,
+    subject: str,
     query_vector: list,
     chapter_name: str = None,
     limit: int = 3
 ):
 
-    query_filter = None
+    collection_name = f"olympiad_grade_{grade}"
+
+    must_conditions = [
+        FieldCondition(
+            key="subject",
+            match=MatchValue(value=subject.lower())
+        )
+    ]
 
     if chapter_name:
-        query_filter = Filter(
-            must=[
-                FieldCondition(
-                    key="chapter_name",
-                    match=MatchValue(value=chapter_name)
-                )
-            ]
+        must_conditions.append(
+            FieldCondition(
+                key="chapter_name",
+                match=MatchValue(value=chapter_name.lower())
+            )
         )
+
+    query_filter = Filter(must=must_conditions)
 
     results = client.query_points(
         collection_name=collection_name,

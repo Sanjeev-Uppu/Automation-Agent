@@ -1,7 +1,6 @@
 import os
 from app.services.ingest import ingest_pdf
 
-
 def ingest_all_pdfs(base_path="data/pdfs"):
 
     for grade_folder in os.listdir(base_path):
@@ -11,38 +10,37 @@ def ingest_all_pdfs(base_path="data/pdfs"):
         if not os.path.isdir(grade_path):
             continue
 
-        # Extract grade number
         grade = int(grade_folder.replace("grade", ""))
 
-        for subject in os.listdir(grade_path):
+        for subject_folder in os.listdir(grade_path):
 
-            subject_path = os.path.join(grade_path, subject)
+            subject_path = os.path.join(grade_path, subject_folder)
 
             if not os.path.isdir(subject_path):
                 continue
 
-            for chapter_folder in os.listdir(subject_path):
+            subject = subject_folder.lower()
 
-                chapter_path = os.path.join(subject_path, chapter_folder)
+            for file in os.listdir(subject_path):
 
-                if not os.path.isdir(chapter_path):
-                    continue
+                if file.endswith(".pdf"):
 
-                for file in os.listdir(chapter_path):
+                    file_path = os.path.join(subject_path, file)
 
-                    if file.endswith(".pdf"):
+                    chapter_name = (
+                        file.replace(".pdf", "")
+                            .split("-", 1)[-1]
+                            .strip()
+                            .lower()
+                    )
 
-                        file_path = os.path.join(chapter_path, file)
+                    print(f"Ingesting Grade {grade} | {subject} | {chapter_name}")
 
-                        chapter_name = file.replace(".pdf", "")
-
-                        print(f"Ingesting Grade {grade} | {subject} | {chapter_name}")
-
-                        ingest_pdf(
-                            file_path=file_path,
-                            grade=grade,
-                            subject=subject,
-                            chapter_name=chapter_name
-                        )
+                    ingest_pdf(
+                        file_path=file_path,
+                        grade=grade,
+                        subject=subject,
+                        chapter_name=chapter_name
+                    )
 
     return {"status": "All PDFs successfully ingested"}

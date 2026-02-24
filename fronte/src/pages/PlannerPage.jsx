@@ -1,21 +1,68 @@
-import { useState, useRef } from "react";
-import html2canvas from "html2canvas";
+import { useState, useEffect } from "react";
+import { motion } from "framer-motion";
 import jsPDF from "jspdf";
 
 export default function PlannerPage() {
+
+  const [grade, setGrade] = useState("");
+  const [subject, setSubject] = useState("");
+  const [chapter, setChapter] = useState("");
   const [days, setDays] = useState(7);
-  const [chapter, setChapter] = useState("Animals");
+
+  const [grades, setGrades] = useState([]);
+  const [subjects, setSubjects] = useState([]);
+  const [chapters, setChapters] = useState([]);
+
   const [plan, setPlan] = useState(null);
   const [loading, setLoading] = useState(false);
 
-  const plannerRef = useRef(null);
+  // ---------------- FETCH GRADES ----------------
+  useEffect(() => {
+    fetch("http://127.0.0.1:8002/grades")
+      .then(res => res.json())
+      .then(data => setGrades(data));
+  }, []);
 
+  // ---------------- FETCH SUBJECTS ----------------
+  useEffect(() => {
+    if (!grade) return;
+
+    fetch(`http://127.0.0.1:8002/subjects?grade=${grade}`)
+      .then(res => res.json())
+      .then(data => setSubjects(data));
+  }, [grade]);
+
+  // ---------------- FETCH CHAPTERS ----------------
+  useEffect(() => {
+    if (!grade || !subject) return;
+
+    fetch(`http://127.0.0.1:8002/chapters?grade=${grade}&subject=${subject}`)
+      .then(res => res.json())
+      .then(data => setChapters(data));
+  }, [grade, subject]);
+
+  // ---------------- GENERATE PLAN ----------------
   const generatePlan = async () => {
+
+    if (!grade || !subject || !chapter || !days) {
+      alert("Please select all fields");
+      return;
+    }
+
     setLoading(true);
 
     const response = await fetch(
-      `http://127.0.0.1:8002/generate-plan/?duration_days=${days}&chapter_name=${chapter}`,
-      { method: "POST" }
+      "http://127.0.0.1:8002/generate-plan/",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          grade: parseInt(grade),
+          subject,
+          chapter_name: chapter,
+          duration_days: parseInt(days)
+        })
+      }
     );
 
     const data = await response.json();
@@ -23,146 +70,129 @@ export default function PlannerPage() {
     setLoading(false);
   };
 
-  // ✅ PDF Download Function
-  const downloadPDF = async () => {
-  if (!plannerRef.current) return;
+  // ---------------- DOWNLOAD PDF ----------------
+  const downloadPDF = () => {
 
-  try {
-    // 🔥 Temporarily remove gradient background
-    const originalBg = document.body.style.background;
-    document.body.style.background = "#ffffff";
+    if (!plan) return;
 
-    const canvas = await html2canvas(plannerRef.current, {
-      scale: 2,
-      useCORS: true,
-      backgroundColor: "#ffffff",
+    const pdf = new jsPDF();
+    let y = 20;
+
+    pdf.setFontSize(18);
+    pdf.text("AI Study Plan", 105, y, { align: "center" });
+    y += 10;
+
+    pdf.setFontSize(12);
+    pdf.text(`Grade: ${grade}`, 15, y); y += 6;
+    pdf.text(`Subject: ${subject}`, 15, y); y += 6;
+    pdf.text(`Chapter: ${chapter}`, 15, y); y += 10;
+
+    plan.plan.forEach(dayItem => {
+
+      pdf.setFontSize(14);
+      pdf.text(`Day ${dayItem.day} – ${dayItem.focus}`, 15, y);
+      y += 7;
+
+      pdf.setFontSize(11);
+      pdf.text(`Estimated Time: ${dayItem.estimated_hours} hrs`, 15, y);
+      y += 7;
+
+      dayItem.topics.forEach(topic => {
+        pdf.text(`• ${topic}`, 20, y);
+        y += 6;
+      });
+
+      y += 4;
     });
 
-    const imgData = canvas.toDataURL("image/png");
-
-    const pdf = new jsPDF("p", "mm", "a4");
-
-    const pageWidth = 210;
-    const pageHeight = 297;
-
-    const imgWidth = pageWidth;
-    const imgHeight = (canvas.height * imgWidth) / canvas.width;
-
-    let heightLeft = imgHeight;
-    let position = 0;
-
-    pdf.addImage(imgData, "PNG", 0, position, imgWidth, imgHeight);
-    heightLeft -= pageHeight;
-
-    while (heightLeft > 0) {
-      position = heightLeft - imgHeight;
-      pdf.addPage();
-      pdf.addImage(imgData, "PNG", 0, position, imgWidth, imgHeight);
-      heightLeft -= pageHeight;
-    }
-
     pdf.save("AI_Study_Plan.pdf");
-
-    // 🔥 Restore background
-    document.body.style.background = originalBg;
-
-  } catch (error) {
-    console.error("PDF error:", error);
-  }
-};
-
-
-
+  };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-black via-indigo-950 to-purple-950 text-white p-10">
+    <div className="min-h-screen bg-gradient-to-br from-black via-slate-900 to-purple-950 text-white p-8">
 
-      <div className="max-w-5xl mx-auto">
+      <h1 className="text-4xl font-bold mb-8">
+        AI Smart Study Planner
+      </h1>
 
-        {/* HEADER */}
-        <h1 className="text-4xl font-bold mb-2">AI Study Planner</h1>
-        <p className="text-gray-400 mb-8">
-          Generate a structured and optimized study roadmap.
-        </p>
+      {/* CONTROLS */}
+      <div className="grid md:grid-cols-4 gap-4 mb-8">
 
-        {/* CONTROLS */}
-        <div className="bg-gray-900 p-6 rounded-2xl shadow-lg flex gap-4 mb-10">
-          <input
-            type="number"
-            value={days}
-            onChange={(e) => setDays(e.target.value)}
-            className="bg-gray-800 p-3 rounded-lg w-32 outline-none"
-            placeholder="Days"
-          />
+        <select
+          value={grade}
+          onChange={(e) => setGrade(e.target.value)}
+          className="bg-black p-3 rounded border border-gray-600"
+        >
+          <option value="">Select Grade</option>
+          {grades.map(g => (
+            <option key={g} value={g}>{g}</option>
+          ))}
+        </select>
 
-          <input
-            type="text"
-            value={chapter}
-            onChange={(e) => setChapter(e.target.value)}
-            className="bg-gray-800 p-3 rounded-lg flex-1 outline-none"
-            placeholder="Chapter Name"
-          />
+        <select
+          value={subject}
+          onChange={(e) => setSubject(e.target.value)}
+          className="bg-black p-3 rounded border border-gray-600"
+        >
+          <option value="">Select Subject</option>
+          {subjects.map(s => (
+            <option key={s} value={s}>{s}</option>
+          ))}
+        </select>
 
-          <button
-            onClick={generatePlan}
-            className="bg-cyan-600 hover:bg-cyan-500 transition px-6 py-3 rounded-lg font-semibold"
-          >
-            {loading ? "Generating..." : "Generate Plan"}
-          </button>
-        </div>
+        <select
+          value={chapter}
+          onChange={(e) => setChapter(e.target.value)}
+          className="bg-black p-3 rounded border border-gray-600"
+        >
+          <option value="">Select Chapter</option>
+          {chapters.map(c => (
+            <option key={c} value={c}>{c}</option>
+          ))}
+        </select>
 
-        {/* PLAN CARDS */}
-        {plan && (
-          <div ref={plannerRef} className="space-y-6">
-            {plan.plan.map((dayItem) => (
-              <div
-                key={dayItem.day}
-                className="bg-gray-900 rounded-2xl p-6 shadow-lg hover:scale-[1.01] transition"
-              >
-                <div className="flex justify-between items-center mb-3">
-                  <h2 className="text-xl font-bold">
-                    Day {dayItem.day} – {dayItem.focus}
-                  </h2>
-                  <span className="text-sm bg-purple-700 px-3 py-1 rounded-full">
-                    {dayItem.estimated_hours} hrs
-                  </span>
-                </div>
-
-                <div className="mb-3">
-                  <h3 className="text-cyan-400 font-semibold mb-1">Topics</h3>
-                  <ul className="list-disc list-inside text-gray-300">
-                    {dayItem.topics.map((topic, index) => (
-                      <li key={index}>{topic}</li>
-                    ))}
-                  </ul>
-                </div>
-
-                <div>
-                  <h3 className="text-green-400 font-semibold mb-1">Tasks</h3>
-                  <ul className="list-disc list-inside text-gray-300">
-                    {dayItem.tasks.map((task, index) => (
-                      <li key={index}>{task}</li>
-                    ))}
-                  </ul>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* ✅ ONLY ADDED BUTTON */}
-        {plan && (
-          <div className="flex justify-center mt-12">
-            <button
-              onClick={downloadPDF}
-              className="bg-gradient-to-r from-purple-600 to-pink-600 hover:scale-105 transition px-10 py-4 rounded-2xl text-lg font-semibold shadow-xl"
-            >
-              Download as PDF
-            </button>
-          </div>
-        )}
+        <input
+          type="number"
+          value={days}
+          onChange={(e) => setDays(e.target.value)}
+          className="bg-black p-3 rounded border border-gray-600"
+        />
 
       </div>
+
+      <motion.button
+        whileHover={{ scale: 1.05 }}
+        onClick={generatePlan}
+        className="bg-gradient-to-r from-pink-500 via-cyan-500 to-green-400 px-6 py-3 rounded-xl font-bold"
+      >
+        {loading ? "Generating..." : "Generate Plan"}
+      </motion.button>
+
+      {/* PLAN DISPLAY */}
+      {plan && (
+        <div className="mt-10 space-y-6">
+
+          {plan.plan.map(dayItem => (
+            <div key={dayItem.day} className="bg-white/10 p-6 rounded-xl">
+              <h2 className="font-bold">
+                Day {dayItem.day} – {dayItem.focus}
+              </h2>
+              <p className="text-sm text-gray-300">
+                {dayItem.estimated_hours} hrs
+              </p>
+            </div>
+          ))}
+
+          <button
+            onClick={downloadPDF}
+            className="mt-6 bg-yellow-500 px-6 py-2 rounded font-bold"
+          >
+            Download PDF
+          </button>
+
+        </div>
+      )}
+
     </div>
   );
 }
