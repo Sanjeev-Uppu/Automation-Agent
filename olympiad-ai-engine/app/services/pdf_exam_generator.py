@@ -64,7 +64,7 @@ def generate_question_paper_pdf(
         ('BOX', (0, 0), (-1, -1), 1, colors.black),
         ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
         ('BACKGROUND', (0, 0), (-1, 0), colors.whitesmoke)
-    ]))
+    ]))      
 
     elements.append(table)
     elements.append(Spacer(1, 0.4 * inch))
