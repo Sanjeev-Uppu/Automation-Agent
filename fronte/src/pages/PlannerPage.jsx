@@ -1,3 +1,4 @@
+import { api } from "../services/api";
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import jsPDF from "jspdf";
@@ -18,27 +19,50 @@ export default function PlannerPage() {
 
   // ---------------- FETCH GRADES ----------------
   useEffect(() => {
-    fetch("http://127.0.0.1:8002/grades")
-      .then(res => res.json())
-      .then(data => setGrades(data));
+    const loadGrades = async () => {
+      try {
+        const data = await api.get("/grades");
+        setGrades(data);
+      } catch (err) {
+        console.error("Failed to load grades:", err);
+      }
+    };
+
+    loadGrades();
   }, []);
 
   // ---------------- FETCH SUBJECTS ----------------
   useEffect(() => {
     if (!grade) return;
 
-    fetch(`http://127.0.0.1:8002/subjects?grade=${grade}`)
-      .then(res => res.json())
-      .then(data => setSubjects(data));
+    const loadSubjects = async () => {
+      try {
+        const data = await api.get(`/subjects?grade=${grade}`);
+        setSubjects(data);
+      } catch (err) {
+        console.error("Failed to load subjects:", err);
+      }
+    };
+
+    loadSubjects();
   }, [grade]);
 
   // ---------------- FETCH CHAPTERS ----------------
   useEffect(() => {
     if (!grade || !subject) return;
 
-    fetch(`http://127.0.0.1:8002/chapters?grade=${grade}&subject=${subject}`)
-      .then(res => res.json())
-      .then(data => setChapters(data));
+    const loadChapters = async () => {
+      try {
+        const data = await api.get(
+          `/chapters?grade=${grade}&subject=${subject}`
+        );
+        setChapters(data);
+      } catch (err) {
+        console.error("Failed to load chapters:", err);
+      }
+    };
+
+    loadChapters();
   }, [grade, subject]);
 
   // ---------------- GENERATE PLAN ----------------
@@ -49,25 +73,24 @@ export default function PlannerPage() {
       return;
     }
 
-    setLoading(true);
+    try {
+      setLoading(true);
 
-    const response = await fetch(
-      "http://127.0.0.1:8002/generate-plan/",
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          grade: parseInt(grade),
-          subject,
-          chapter_name: chapter,
-          duration_days: parseInt(days)
-        })
-      }
-    );
+      const data = await api.post("/generate-plan/", {
+        grade: parseInt(grade),
+        subject,
+        chapter_name: chapter,
+        duration_days: parseInt(days),
+      });
 
-    const data = await response.json();
-    setPlan(data);
-    setLoading(false);
+      setPlan(data);
+
+    } catch (err) {
+      console.error("Failed to generate plan:", err);
+      alert("Failed to generate study plan.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   // ---------------- DOWNLOAD PDF ----------------
@@ -89,6 +112,11 @@ export default function PlannerPage() {
 
     plan.plan.forEach(dayItem => {
 
+      if (y > 270) {
+        pdf.addPage();
+        y = 20;
+      }
+
       pdf.setFontSize(14);
       pdf.text(`Day ${dayItem.day} – ${dayItem.focus}`, 15, y);
       y += 7;
@@ -98,6 +126,10 @@ export default function PlannerPage() {
       y += 7;
 
       dayItem.topics.forEach(topic => {
+        if (y > 280) {
+          pdf.addPage();
+          y = 20;
+        }
         pdf.text(`• ${topic}`, 20, y);
         y += 6;
       });
@@ -153,6 +185,7 @@ export default function PlannerPage() {
 
         <input
           type="number"
+          min="1"
           value={days}
           onChange={(e) => setDays(e.target.value)}
           className="bg-black p-3 rounded border border-gray-600"

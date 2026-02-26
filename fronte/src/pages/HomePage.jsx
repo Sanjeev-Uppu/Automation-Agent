@@ -1,3 +1,4 @@
+import { api } from "../services/api";
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
@@ -15,7 +16,6 @@ function CustomDropdown({
   const [open, setOpen] = useState(false);
   const ref = useRef();
 
-  // Close on outside click
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (ref.current && !ref.current.contains(event.target)) {
@@ -95,32 +95,55 @@ export default function HomePage() {
 
   const navigate = useNavigate();
 
-  // Load grades
+  // ================= LOAD GRADES =================
   useEffect(() => {
-    fetch("http://127.0.0.1:8002/grades")
-      .then((res) => res.json())
-      .then((data) => setGrades(data));
+    const loadGrades = async () => {
+      try {
+        const data = await api.get("/grades");
+        setGrades(data);
+      } catch (err) {
+        console.error("Failed to load grades", err);
+      }
+    };
+
+    loadGrades();
   }, []);
 
-  // Load subjects
+  // ================= LOAD SUBJECTS =================
   useEffect(() => {
     if (!grade) return;
 
-    fetch(`http://127.0.0.1:8002/subjects?grade=${grade.replace("Grade ", "")}`)
-      .then((res) => res.json())
-      .then((data) => setSubjects(data));
+    const loadSubjects = async () => {
+      try {
+        const cleanGrade = grade.replace("Grade ", "");
+        const data = await api.get(`/subjects?grade=${cleanGrade}`);
+        setSubjects(data);
+      } catch (err) {
+        console.error("Failed to load subjects", err);
+      }
+    };
+
+    loadSubjects();
   }, [grade]);
 
-  // Load chapters
+  // ================= LOAD CHAPTERS =================
   useEffect(() => {
     if (!grade || !subject) return;
 
-    fetch(
-      `http://127.0.0.1:8002/chapters?grade=${grade.replace("Grade ", "")}&subject=${subject}`
-    )
-      .then((res) => res.json())
-      .then((data) => setChapters(data));
-  }, [subject]);
+    const loadChapters = async () => {
+      try {
+        const cleanGrade = grade.replace("Grade ", "");
+        const data = await api.get(
+          `/chapters?grade=${cleanGrade}&subject=${subject}`
+        );
+        setChapters(data);
+      } catch (err) {
+        console.error("Failed to load chapters", err);
+      }
+    };
+
+    loadChapters();
+  }, [subject, grade]);
 
   const openChat = () => {
     navigate("/chat", {
@@ -133,11 +156,12 @@ export default function HomePage() {
   };
 
   return (
-    <div className="relative min-h-screen flex items-center justify-center 
+    <div
+      className="relative min-h-screen flex items-center justify-center 
     bg-gradient-to-br from-black via-slate-900 to-purple-950 
-    px-4 sm:px-6 md:px-10 py-12 overflow-hidden">
-
-      {/* Floating Background Orbs */}
+    px-4 sm:px-6 md:px-10 py-12 overflow-hidden"
+    >
+      {/* Background Orbs */}
       <motion.div
         animate={{ y: [0, 30, 0] }}
         transition={{ duration: 6, repeat: Infinity }}
@@ -151,7 +175,6 @@ export default function HomePage() {
         rounded-full blur-3xl bottom-[-120px] right-[-120px]"
       />
 
-      {/* Card */}
       <motion.div
         initial={{ opacity: 0, y: 80, scale: 0.95 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -163,20 +186,22 @@ export default function HomePage() {
         rounded-3xl 
         p-6 sm:p-8 md:p-12"
       >
-
-        <h1 className="text-3xl sm:text-4xl md:text-5xl
+        <h1
+          className="text-3xl sm:text-4xl md:text-5xl
         font-extrabold text-white text-center tracking-wide
         drop-shadow-[0_0_15px_rgba(255,255,255,0.3)]
-        mb-3">
+        mb-3"
+        >
           Olympiad AI Learning Hub
         </h1>
 
-        <div className="h-[3px] w-36 mx-auto mb-8
+        <div
+          className="h-[3px] w-36 mx-auto mb-8
         bg-gradient-to-r from-pink-500 via-cyan-400 to-yellow-400
-        rounded-full" />
+        rounded-full"
+        />
 
         <div className="space-y-5">
-
           <CustomDropdown
             label="Select Grade"
             value={grade}
@@ -221,7 +246,6 @@ export default function HomePage() {
         >
           Open Chat
         </motion.button>
-
       </motion.div>
     </div>
   );

@@ -1,3 +1,4 @@
+import { api } from "../services/api";
 import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useNavigate, useLocation } from "react-router-dom";
@@ -61,21 +62,13 @@ export default function ChatPage() {
       }
 
       // ================= CALL BACKEND =================
-      const response = await fetch(
-        "http://127.0.0.1:8002/ask/",
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            question,
-            grade,
-            subject,
-            chapter_name,
-          }),
-        }
-      );
-
-      const data = await response.json();
+      // ================= CALL BACKEND =================
+const data = await api.post("/ask/", {
+  question,
+  grade,
+  subject,
+  chapter_name,
+});
 
       // ================= QUESTION PAPER INTENT =================
       // ================= QUESTION PAPER =================

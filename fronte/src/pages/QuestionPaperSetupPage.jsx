@@ -1,3 +1,4 @@
+import { api } from "../services/api";
 import { useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 
@@ -29,29 +30,19 @@ export default function QuestionPaperSetupPage() {
       return;
     }
 
-    setLoading(true);
-
     try {
-      const response = await fetch(
-        "http://127.0.0.1:8002/generate-question-paper/",
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            grade,
-            subject,
-            chapter_name,
-            number_of_questions: parseInt(numberOfQuestions),
-            marks_per_question: parseInt(marksPerQuestion),
-            duration_minutes: parseInt(durationMinutes),
-            difficulty_level: difficulty
-          }),
-        }
-      );
+      setLoading(true);
 
-      const data = await response.json();
+      const data = await api.post("/generate-question-paper/", {
+        grade,
+        subject,
+        chapter_name,
+        number_of_questions: parseInt(numberOfQuestions),
+        marks_per_question: parseInt(marksPerQuestion),
+        duration_minutes: parseInt(durationMinutes),
+        difficulty_level: difficulty
+      });
 
-      // ✅ CORRECT LOGIC
       if (data.paper_data) {
         navigate("/question-paper-preview", {
           state: {
@@ -63,11 +54,11 @@ export default function QuestionPaperSetupPage() {
       }
 
     } catch (error) {
-      console.error(error);
+      console.error("Generation failed:", error);
       alert("Something went wrong.");
+    } finally {
+      setLoading(false);
     }
-
-    setLoading(false);
   };
 
   return (

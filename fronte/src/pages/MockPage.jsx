@@ -1,3 +1,4 @@
+import { api } from "../services/api";
 import { useLocation } from "react-router-dom";
 import { useState, useEffect } from "react";
 
@@ -33,29 +34,25 @@ export default function MockPage() {
 
   // ---------------- GENERATE MOCK ----------------
   const generateMock = async () => {
+    try {
+      setLoading(true);
 
-    setLoading(true);
+      const data = await api.post("/generate-mock/", {
+        grade,
+        subject,
+        chapter_name,
+        number_of_questions: questionCount,
+        duration_minutes: durationMinutes,
+      });
 
-    const response = await fetch(
-      "http://127.0.0.1:8002/generate-mock/",
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          grade,
-          subject,
-          chapter_name,
-          number_of_questions: questionCount,
-          duration_minutes: durationMinutes,
-        }),
-      }
-    );
+      setMockData(data);
+      setTimeLeft(durationMinutes * 60);
 
-    const data = await response.json();
-
-    setMockData(data);
-    setTimeLeft(durationMinutes * 60);
-    setLoading(false);
+    } catch (error) {
+      console.error("Mock generation failed:", error);
+    } finally {
+      setLoading(false);
+    }
   };
 
   // ---------------- HANDLE ANSWER ----------------
@@ -68,26 +65,21 @@ export default function MockPage() {
 
   // ---------------- SUBMIT ----------------
   const handleSubmit = async () => {
+    try {
+      const submission = {
+        questions: mockData.questions.map(q => ({
+          question_id: q.id,
+          selected_answer: answers[q.id] || "",
+          correct_answer: q.correct_answer,
+        })),
+      };
 
-    const submission = {
-      questions: mockData.questions.map(q => ({
-        question_id: q.id,
-        selected_answer: answers[q.id] || "",
-        correct_answer: q.correct_answer,
-      })),
-    };
+      const data = await api.post("/submit-mock/", submission);
+      setResult(data);
 
-    const response = await fetch(
-      "http://127.0.0.1:8002/submit-mock/",
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(submission),
-      }
-    );
-
-    const data = await response.json();
-    setResult(data);
+    } catch (error) {
+      console.error("Submission failed:", error);
+    }
   };
 
   // ---------------- SAFETY ----------------

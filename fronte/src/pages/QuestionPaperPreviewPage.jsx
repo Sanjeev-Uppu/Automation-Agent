@@ -1,3 +1,4 @@
+import { api } from "../services/api";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useState } from "react";
 
@@ -20,51 +21,50 @@ export default function QuestionPaperPreviewPage() {
     );
   }
 
+  // ---------------- MODIFY PAPER ----------------
   const handleModify = async () => {
     if (!modificationText.trim()) return;
 
-    setLoading(true);
+    try {
+      setLoading(true);
 
-    const response = await fetch(
-      "http://127.0.0.1:8002/modify-question-paper/",
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          original_paper: paperData,
-          modification_request: modificationText
-        })
+      const data = await api.post("/modify-question-paper/", {
+        original_paper: paperData,
+        modification_request: modificationText
+      });
+
+      if (data.paper_data) {
+        setPaperData(data.paper_data);
+        setShowModifyBox(false);
+        setModificationText("");
       }
-    );
 
-    const data = await response.json();
-
-    if (data.paper_data) {
-      setPaperData(data.paper_data);
-      setShowModifyBox(false);
-      setModificationText("");
+    } catch (error) {
+      console.error("Modification failed:", error);
+      alert("Failed to modify question paper.");
+    } finally {
+      setLoading(false);
     }
-
-    setLoading(false);
   };
 
+  // ---------------- DOWNLOAD PDF ----------------
   const handleDownload = async () => {
+    try {
+      const data = await api.post("/generate-question-paper-pdf/", {
+        paper_data: paperData
+      });
 
-    const response = await fetch(
-      "http://127.0.0.1:8002/generate-question-paper-pdf/",
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          paper_data: paperData
-        })
+      if (data.download_url) {
+        // IMPORTANT: prefix with API base if needed
+        window.open(
+          `${import.meta.env.VITE_API_BASE_URL}${data.download_url}`,
+          "_blank"
+        );
       }
-    );
 
-    const data = await response.json();
-
-    if (data.download_url) {
-      window.open(data.download_url, "_blank");
+    } catch (error) {
+      console.error("Download failed:", error);
+      alert("Failed to generate PDF.");
     }
   };
 
