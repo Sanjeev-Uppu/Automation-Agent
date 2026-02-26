@@ -11,27 +11,16 @@ from qdrant_client.models import (
 
 load_dotenv()
 
-_client = None
-
-
-def get_client():
-    global _client
-    if _client is None:
-        _client = QdrantClient(
-            url=os.getenv("QDRANT_URL"),
-            api_key=os.getenv("QDRANT_API_KEY"),
-            timeout=5  # VERY IMPORTANT (prevents hanging)
-        )
-    return _client
-
+client = QdrantClient(
+    url=os.getenv("QDRANT_URL"),
+    api_key=os.getenv("QDRANT_API_KEY")
+)
 
 # --------------------------------------------------
 # CREATE COLLECTION
 # --------------------------------------------------
 
 def create_collection(collection_name: str, vector_size: int = 384):
-
-    client = get_client()
 
     existing = [c.name for c in client.get_collections().collections]
 
@@ -58,7 +47,7 @@ def create_collection(collection_name: str, vector_size: int = 384):
 
 
 # --------------------------------------------------
-# SEARCH SIMILAR
+# SEARCH SIMILAR (SAFE VERSION)
 # --------------------------------------------------
 
 def search_similar(
@@ -69,8 +58,6 @@ def search_similar(
     chapter_name: str = None,
     limit: int = 3
 ):
-
-    client = get_client()
 
     collection_name = f"olympiad_grade_{grade}"
 

@@ -6,8 +6,8 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from app.services.question_paper_modify_engine import regenerate_question_paper_with_modifications
-#from app.vectorstore.qdrant_client import client, search_similar
-from app.vectorstore.qdrant_client import get_client, search_similar
+from app.vectorstore.qdrant_client import client, search_similar
+#from app.vectorstore.qdrant_client import get_client, search_similar
 from app.models.request_models import AskRequest
 from app.models.mock_models import (
     MockRequest,
@@ -238,7 +238,7 @@ def download_file(filename: str):
 
 @app.get("/grades")
 def get_grades():
-    collections = get_client.get_collections().collections
+    collections = client.get_collections().collections
     grades = [
         col.name.replace("olympiad_grade_", "")
         for col in collections
@@ -256,7 +256,7 @@ def get_subjects(grade: int):
 
     collection_name = f"olympiad_grade_{grade}"
 
-    results = get_client.scroll(
+    results = client.scroll(
         collection_name=collection_name,
         limit=500
     )
@@ -278,7 +278,7 @@ def get_chapters(grade: int, subject: str):
 
     collection_name = f"olympiad_grade_{grade}"
 
-    results = get_client.scroll(
+    results = client.scroll(
         collection_name=collection_name,
         scroll_filter=Filter(
             must=[
