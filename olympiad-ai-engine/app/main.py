@@ -208,10 +208,10 @@ def generate_question_paper_pdf_endpoint(request: dict):
     )
 
     return {
-        "download_url": f"http://127.0.0.1:8002/download/{filename}"
-    }
+    "download_url": f"/download/{filename}"
+}
 
-
+"""
 @app.get("/download/{filename}")
 def download_file(filename: str):
 
@@ -229,6 +229,7 @@ def download_file(filename: str):
         }
     )
 
+"""
 
 # --------------------------------------------------
 # GET GRADES
